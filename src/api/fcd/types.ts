@@ -1,5 +1,8 @@
+export type FCDTxType = "FX" | "GOLD_BUY" | "GOLD_SELL" | "INTEREST" | "TRANSFER"
+
 export interface FCDEntry {
   id: number;
+  tx_type: FCDTxType;
   status: string;
   date: string;
   usd: number;
@@ -10,6 +13,7 @@ export interface FCDEntry {
 }
 
 export interface NewFCDEntry {
+  tx_type: FCDTxType;
   status: string;
   date: string;
   usd: number;

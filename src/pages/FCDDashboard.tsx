@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState } from "react"
 import { fetchFCDEntries, addFCDEntry, calculateFCDStats, formatCurrency } from "../api/fcd"
-import type { FCDEntry, FCDStats, NewFCDEntry } from "../api/fcd/types"
+import type { FCDEntry, FCDStats, NewFCDEntry, FCDTxType } from "../api/fcd/types"
 import { format, parseISO, parse } from "date-fns"
 import Input from "../components/Input"
 import Button from "../components/Button"
@@ -17,14 +17,33 @@ interface ExtractedFields {
 }
 
 function parseExtractedDate(dateStr: string | null): string {
-  if (!dateStr) return format(new Date(), "yyyy-MM-dd")
+  // Return format compatible with datetime-local (yyyy-MM-ddThh:mm)
+  if (!dateStr) return format(new Date(), "yyyy-MM-dd'T'HH:mm")
 
   try {
-    const cleanDate = dateStr.split("-")[0].trim()
-    const parsed = parse(cleanDate, "d MMMM yyyy", new Date())
-    return format(parsed, "yyyy-MM-dd")
+    // Attempt cleaning typical OCR artifacts
+    const cleanDate = dateStr.replace(/Submission Date/i, "").trim()
+    // Try parsing with time first
+    const parsedWithTime = parse(cleanDate, "d MMMM yyyy - h:mm a", new Date())
+    if (!isNaN(parsedWithTime.getTime())) {
+      return format(parsedWithTime, "yyyy-MM-dd'T'HH:mm")
+    }
+
+    // Fallback to date only (default to current time or 00:00? User requested User Local time default if not specified, 
+    // but if OCR found a date only, typically it implies 00:00 or current time. 
+    // Let's use current time for the time part if missing, or 00:00 if that's safer. 
+    // The prompt says "If user doesn't select time -> set to current time". 
+    // For OCR, probably safer to keep current time?
+    const cleanDateOnly = dateStr.split("-")[0].trim()
+    const parsedDate = parse(cleanDateOnly, "d MMMM yyyy", new Date())
+
+    // Merge parsed date with current time
+    const now = new Date()
+    parsedDate.setHours(now.getHours(), now.getMinutes())
+
+    return format(parsedDate, "yyyy-MM-dd'T'HH:mm")
   } catch {
-    return format(new Date(), "yyyy-MM-dd")
+    return format(new Date(), "yyyy-MM-dd'T'HH:mm")
   }
 }
 
@@ -45,11 +64,12 @@ export default function FCDDashboard() {
 
   // Entry form
   const [entryData, setEntryData] = useState<NewFCDEntry>({
+    tx_type: "FX",
     status: "IN",
-    date: format(new Date(), "yyyy-MM-dd"),
+    date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     usd: 0,
-    thb: 0,
-    rate: 0,
+    thb: null,
+    rate: null,
     note: "",
   })
 
@@ -78,24 +98,96 @@ export default function FCDDashboard() {
     .filter((e) => e.rate)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .map((entry) => ({
-      date: format(parseISO(entry.date), "dd/MM"),
+      date: format(parseISO(entry.date), "dd/MM HH:mm"),
       rate: Number(entry.rate || 0),
     }))
 
+  const handleTxTypeChange = (newType: FCDTxType) => {
+    let newStatus = entryData.status
+    let newThb = entryData.thb
+    let newRate = entryData.rate
+
+    switch (newType) {
+      case "FX":
+        newStatus = "IN"
+        // Ensure THB/Rate are numeric if switching to FX, or keep them if they are valid
+        newThb = typeof newThb === 'number' ? newThb : 0
+        newRate = typeof newRate === 'number' ? newRate : 0
+        break
+      case "GOLD_BUY":
+        newStatus = "OUT"
+        newThb = null
+        newRate = null
+        break
+      case "GOLD_SELL":
+        newStatus = "IN"
+        newThb = null
+        newRate = null
+        break
+      case "INTEREST":
+        newStatus = "IN"
+        newThb = null
+        newRate = null
+        break
+      case "TRANSFER":
+        if (newStatus !== "IN" && newStatus !== "OUT") newStatus = "IN"
+        newThb = null
+        newRate = null
+        break
+    }
+    setEntryData({ ...entryData, tx_type: newType, status: newStatus, thb: newThb, rate: newRate })
+  }
+
   const handleAddEntry = async () => {
-    if (entryData.usd === 0 && (entryData.thb || 0) === 0) {
-      alert("Please enter USD or THB amount")
+    // Validation: FX requires rate & thb
+    if (entryData.tx_type === "FX") {
+      if ((entryData.rate ?? 0) <= 0 || (entryData.thb ?? 0) <= 0) {
+        alert("For FX, Rate and THB are required")
+        return
+      }
+    } else {
+      // Validation: Non-FX must have null thb/rate
+      if (entryData.thb != null && entryData.thb !== 0) {
+        alert(`For ${entryData.tx_type}, THB must be empty (null).`)
+        return
+      }
+      if (entryData.rate != null && entryData.rate !== 0) {
+        alert(`For ${entryData.tx_type}, Rate must be empty (null).`)
+        return
+      }
+    }
+
+    if (entryData.usd <= 0) {
+      alert("Please enter USD amount")
       return
     }
 
+    // Strict payload construction
+    // Convert local datetime-local string to ISO 8601 with timezone offset
+    // The input value is like "2026-02-03T15:30" (local time)
+    // We want to send "2026-02-03T15:30:00+07:00"
+    const dateObj = new Date(entryData.date)
+    // date-fns format(date, "yyyy-MM-dd'T'HH:mm:ssXXX") will output the local time with offset
+    // IMPORTANT: new Date("2026-02-03T15:30") creates a date in local timezone.
+    const isoWithOffset = format(dateObj, "yyyy-MM-dd'T'HH:mm:ssXXX")
+
+    const payload: NewFCDEntry = {
+      ...entryData,
+      date: isoWithOffset,
+      // Force nulls for non-FX types to ensure no 0s are sent
+      thb: entryData.tx_type === 'FX' ? entryData.thb : null,
+      rate: entryData.tx_type === 'FX' ? entryData.rate : null,
+    }
+
     try {
-      await addFCDEntry(entryData)
+      await addFCDEntry(payload)
       setEntryData({
+        tx_type: "FX",
         status: "IN",
-        date: format(new Date(), "yyyy-MM-dd"),
+        date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         usd: 0,
-        thb: 0,
-        rate: 0,
+        thb: 0, // Reset to 0 for FX default
+        rate: 0, // Reset to 0 for FX default
         note: "",
       })
       fetchData()
@@ -220,6 +312,7 @@ export default function FCDDashboard() {
     if (!modalFields) return
 
     setEntryData({
+      tx_type: "FX",
       status: "IN",
       date: parseExtractedDate(modalFields.Date),
       usd: modalFields.USD || 0,
@@ -286,9 +379,9 @@ export default function FCDDashboard() {
                 <LineChart data={rateChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                   <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
                   <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 12 }} />
-                  <YAxis 
-                    stroke="#64748b" 
-                    tick={{ fontSize: 12 }} 
+                  <YAxis
+                    stroke="#64748b"
+                    tick={{ fontSize: 12 }}
                     domain={['dataMin - 0.5', 'dataMax + 0.5']}
                     tickFormatter={(value) => value.toFixed(2)}
                   />
@@ -314,72 +407,97 @@ export default function FCDDashboard() {
             <span className="text-slate-600 text-xl">{showAddEntry ? '−' : '+'}</span>
           </button>
           {showAddEntry && (
-          <div className="px-4 pb-4 space-y-3 border-t border-gray-200 pt-3">
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">USD</span>
-              <Input
-                type="number"
-                step="0.01"
-                value={entryData.usd || ""}
-                onChange={(e) => setEntryData({ ...entryData, usd: Number.parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">THB</span>
-              <Input
-                type="number"
-                step="0.01"
-                value={entryData.thb || ""}
-                onChange={(e) => setEntryData({ ...entryData, thb: Number.parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">Rate (THB / USD)</span>
-              <Input
-                type="number"
-                step="0.0001"
-                value={entryData.rate || ""}
-                onChange={(e) => setEntryData({ ...entryData, rate: Number.parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">Date</span>
-              <Input
-                type="date"
-                value={entryData.date}
-                onChange={(e) => setEntryData({ ...entryData, date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">Status</span>
-              <select
-                value={entryData.status}
-                onChange={(e) => setEntryData({ ...entryData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white"
-              >
-                <option value="IN">IN</option>
-                <option value="Interest">Interest</option>
-                <option value="Out">Out</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700 mb-1 block">Note</span>
-              <Input
-                type="text"
-                value={entryData.note || ""}
-                onChange={(e) => setEntryData({ ...entryData, note: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                placeholder="Optional"
-              />
-            </label>
-            <Button onClick={handleAddEntry} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 font-semibold">
-              Save entry
-            </Button>
-          </div>
+            <div className="px-4 pb-4 space-y-3 border-t border-gray-200 pt-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700 mb-1 block">Transaction Type</span>
+                <select
+                  value={entryData.tx_type}
+                  onChange={(e) => handleTxTypeChange(e.target.value as FCDTxType)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white"
+                >
+                  <option value="FX">FX</option>
+                  <option value="GOLD_BUY">Gold Buy</option>
+                  <option value="GOLD_SELL">Gold Sell</option>
+                  <option value="INTEREST">Interest</option>
+                  <option value="TRANSFER">Transfer</option>
+                </select>
+                <div className="text-xs text-slate-500 mt-1">
+                  {entryData.tx_type === 'FX' && "Currency exchange with rate"}
+                  {entryData.tx_type !== 'FX' && <span className="text-amber-600">THB & Rate are for FX only (will be null)</span>}
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700 mb-1 block">USD</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={entryData.usd || ""}
+                  onChange={(e) => setEntryData({ ...entryData, usd: Number.parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                />
+              </label>
+
+              {entryData.tx_type === 'FX' && (
+                <>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700 mb-1 block">THB</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={entryData.thb || ""}
+                      onChange={(e) => setEntryData({ ...entryData, thb: Number.parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700 mb-1 block">Rate (THB / USD)</span>
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      value={entryData.rate || ""}
+                      onChange={(e) => setEntryData({ ...entryData, rate: Number.parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                    />
+                  </label>
+                </>
+              )}
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700 mb-1 block">Date & Time (System Time)</span>
+                <Input
+                  type="datetime-local"
+                  value={entryData.date}
+                  onChange={(e) => setEntryData({ ...entryData, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700 mb-1 block">Status</span>
+                <select
+                  value={entryData.status}
+                  onChange={(e) => setEntryData({ ...entryData, status: e.target.value })}
+                  disabled={entryData.tx_type !== 'TRANSFER'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  <option value="IN">IN</option>
+                  <option value="OUT">OUT</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700 mb-1 block">Note</span>
+                <Input
+                  type="text"
+                  value={entryData.note || ""}
+                  onChange={(e) => setEntryData({ ...entryData, note: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  placeholder="Optional"
+                />
+              </label>
+              <Button onClick={handleAddEntry} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 font-semibold">
+                Save entry
+              </Button>
+            </div>
           )}
         </div>
 
@@ -395,7 +513,11 @@ export default function FCDDashboard() {
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-sky-100 text-sky-700">
                       {entry.status}
                     </span>
-                    <span className="text-sm text-slate-600">{format(new Date(entry.date), "MMM dd, yyyy")}</span>
+                    <span className="text-sm text-slate-600">
+                      {/* Backward compatibility: if date has default T00:00:00 or T00:00:00+00 it usually means old date. 
+                          We display full DateTime now. Old dates will show 00:00. */}
+                      {format(parseISO(entry.date), "MMM dd, yyyy HH:mm")}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-semibold text-slate-900">{formatCurrency(entry.usd, "USD")}</span>
