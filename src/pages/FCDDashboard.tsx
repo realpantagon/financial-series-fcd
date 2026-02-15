@@ -90,15 +90,12 @@ export default function FCDDashboard() {
     }
   }
 
-  const totalInterest = entries
-    .filter((e) => e.status === "Interest")
-    .reduce((sum, e) => sum + Number(e.usd) + (Number(e.thb) || 0), 0)
 
   const rateChartData = entries
     .filter((e) => e.rate)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .map((entry) => ({
-      date: format(parseISO(entry.date), "dd/MM HH:mm"),
+      date: format(parseISO(entry.date), "dd/MM"),
       rate: Number(entry.rate || 0),
     }))
 
@@ -125,7 +122,7 @@ export default function FCDDashboard() {
         newRate = null
         break
       case "INTEREST":
-        newStatus = "IN"
+        newStatus = "Interest"
         newThb = null
         newRate = null
         break
@@ -351,46 +348,127 @@ export default function FCDDashboard() {
 
       <div className="px-4 space-y-4">
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Total USD</div>
-            <div className="text-xl font-bold text-slate-900">{formatCurrency(stats?.total_usd || 0, "USD")}</div>
+        {/* Summary Cards */}
+        {/* Summary Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Liquidity Section */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Liquidity
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <div>
+                  <div className="text-slate-500 text-xs mb-1">Cash Remain</div>
+                  <div className={`text-2xl font-bold ${stats && stats.cash_remain < 0 ? 'text-rose-500' : 'text-slate-900'}`}>
+                    {formatCurrency(stats?.cash_remain || 0, "USD")}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-400 mb-1">Net Flow</div>
+                  <div className={`text-sm font-medium px-2 py-1 rounded-full ${stats && stats.cash_remain >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                    {stats && stats.cash_remain >= 0 ? '+' : ''}{((stats?.cash_remain || 0) / (stats?.total_in || 1) * 100).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+                <div>
+                  <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                    <svg className="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                    Total In
+                  </div>
+                  <div className="text-lg font-semibold text-emerald-600">{formatCurrency(stats?.total_in || 0, "USD")}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                    <svg className="w-3 h-3 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                    Total Out
+                  </div>
+                  <div className="text-lg font-semibold text-rose-500">{formatCurrency(stats?.total_out || 0, "USD")}</div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Total THB</div>
-            <div className="text-xl font-bold text-slate-900">{formatCurrency(stats?.total_thb || 0, "THB")}</div>
-          </div>
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Avg Rate</div>
-            <div className="text-xl font-bold text-slate-900">{stats?.weighted_avg_rate.toFixed(4) || "0.0000"}</div>
-          </div>
-          <div className="bg-white rounded-lg p-3 border border-gray-200">
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Sum Interest</div>
-            <div className="text-xl font-bold text-sky-600">{formatCurrency(totalInterest, "USD")}</div>
+
+          {/* Performance Section */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+              Performance
+            </h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+              <div>
+                <div className="text-xs text-slate-500 mb-1">Gold Profit</div>
+                <div className={`text-xl font-bold ${stats && stats.gold_profit >= 0 ? 'text-amber-500' : 'text-rose-500'}`}>
+                  {stats && stats.gold_profit > 0 ? '+' : ''}{formatCurrency(stats?.gold_profit || 0, "USD")}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 mb-1">Interest Income</div>
+                <div className="text-xl font-bold text-sky-500">
+                  +{formatCurrency(stats?.interest_income || 0, "USD")}
+                </div>
+              </div>
+              <div className="col-span-2 pt-4 border-t border-slate-50 flex justify-between items-center">
+                <div className="text-xs text-slate-400">Weighted Avg Rate</div>
+                <div className="text-2xl font-mono font-medium text-slate-700 tracking-tight">
+                  {stats?.weighted_avg_rate.toFixed(4) || "0.0000"} <span className="text-xs text-slate-400 font-sans">THB/USD</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Exchange Rate Chart */}
         {rateChartData.length > 0 && (
-          <div className="bg-white rounded-lg p-4 border border-gray-200">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Exchange Rate per Record</h2>
-            <div className="w-full h-56">
+          <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Exchange Rate Trend</h2>
+                <p className="text-xs text-slate-500 mt-1">Rate fluctuations over time</p>
+              </div>
+              <div className="text-xs font-medium px-2 py-1 bg-sky-50 text-sky-600 rounded-lg">LIVE</div>
+            </div>
+            <div className="w-full h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rateChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
-                  <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 12 }} />
+                <LineChart data={rateChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    angle={-90}
+                    textAnchor="end"
+                    height={50}
+                    interval="preserveStartEnd"
+                  />
                   <YAxis
-                    stroke="#64748b"
-                    tick={{ fontSize: 12 }}
-                    domain={['dataMin - 0.5', 'dataMax + 0.5']}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={['auto', 'auto']}
                     tickFormatter={(value) => value.toFixed(2)}
                   />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 8 }}
-                    labelStyle={{ fontWeight: 600, color: "#0f172a" }}
-                    formatter={(value?: number) => (value ?? 0).toFixed(2)}
+                    contentStyle={{ backgroundColor: "#1e293b", border: "none", borderRadius: "12px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                    itemStyle={{ color: "#f8fafc" }}
+                    labelStyle={{ color: "#94a3b8", marginBottom: "0.25rem", fontSize: "0.75rem" }}
+                    formatter={(value: number | undefined) => [value ? value.toFixed(4) : "0.0000", 'Rate']}
                   />
-                  <Line type="monotone" dataKey="rate" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 3 }} name="Rate" />
+                  <Line
+                    type="monotone"
+                    dataKey="rate"
+                    stroke="#0ea5e9"
+                    strokeWidth={3}
+                    dot={{ r: 0, strokeWidth: 0 }}
+                    activeDot={{ r: 6, stroke: "#38bdf8", strokeWidth: 3, fill: "#fff" }}
+                    name="Rate"
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -398,151 +476,229 @@ export default function FCDDashboard() {
         )}
 
         {/* Add Entry Form */}
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <button
             onClick={() => setShowAddEntry(!showAddEntry)}
-            className="w-full px-4 py-3 flex justify-between items-center text-left"
+            className="w-full px-5 py-4 flex justify-between items-center text-left hover:bg-slate-50 transition-colors"
           >
-            <h2 className="text-lg font-semibold text-slate-900">Add Entry</h2>
-            <span className="text-slate-600 text-xl">{showAddEntry ? '−' : '+'}</span>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              </div>
+              <h2 className="text-base font-bold text-slate-900">Add New Entry</h2>
+            </div>
+            <span className={`text-slate-400 transition-transform duration-200 ${showAddEntry ? 'rotate-180' : ''}`}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </span>
           </button>
           {showAddEntry && (
-            <div className="px-4 pb-4 space-y-3 border-t border-gray-200 pt-3">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 mb-1 block">Transaction Type</span>
-                <select
-                  value={entryData.tx_type}
-                  onChange={(e) => handleTxTypeChange(e.target.value as FCDTxType)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white"
-                >
-                  <option value="FX">FX</option>
-                  <option value="GOLD_BUY">Gold Buy</option>
-                  <option value="GOLD_SELL">Gold Sell</option>
-                  <option value="INTEREST">Interest</option>
-                  <option value="TRANSFER">Transfer</option>
-                </select>
-                <div className="text-xs text-slate-500 mt-1">
-                  {entryData.tx_type === 'FX' && "Currency exchange with rate"}
-                  {entryData.tx_type !== 'FX' && <span className="text-amber-600">THB & Rate are for FX only (will be null)</span>}
-                </div>
-              </label>
+            <div className="px-5 pb-6 pt-2 space-y-5 border-t border-slate-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Transaction Type</span>
+                  <select
+                    value={entryData.tx_type}
+                    onChange={(e) => handleTxTypeChange(e.target.value as FCDTxType)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 bg-white transition-all shadow-sm"
+                  >
+                    <option value="FX">💱 FX Exchange</option>
+                    <option value="GOLD_BUY">🟡 Gold Buy</option>
+                    <option value="GOLD_SELL">💰 Gold Sell</option>
+                    <option value="INTEREST">📈 Interest</option>
+                    <option value="TRANSFER">↔️ Transfer</option>
+                  </select>
+                </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 mb-1 block">USD</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={entryData.usd || ""}
-                  onChange={(e) => setEntryData({ ...entryData, usd: Number.parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                />
-              </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Date & Time</span>
+                  <Input
+                    type="datetime-local"
+                    value={entryData.date}
+                    onChange={(e) => setEntryData({ ...entryData, date: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all shadow-sm"
+                  />
+                </label>
 
-              {entryData.tx_type === 'FX' && (
-                <>
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700 mb-1 block">THB</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={entryData.thb || ""}
-                      onChange={(e) => setEntryData({ ...entryData, thb: Number.parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700 mb-1 block">Rate (THB / USD)</span>
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      value={entryData.rate || ""}
-                      onChange={(e) => setEntryData({ ...entryData, rate: Number.parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                    />
-                  </label>
-                </>
-              )}
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">USD Amount</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={entryData.usd || ""}
+                    onChange={(e) => setEntryData({ ...entryData, usd: Number.parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all shadow-sm font-medium"
+                    placeholder="0.00"
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 mb-1 block">Date & Time (System Time)</span>
-                <Input
-                  type="datetime-local"
-                  value={entryData.date}
-                  onChange={(e) => setEntryData({ ...entryData, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 mb-1 block">Status</span>
-                <select
-                  value={entryData.status}
-                  onChange={(e) => setEntryData({ ...entryData, status: e.target.value })}
-                  disabled={entryData.tx_type !== 'TRANSFER'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:text-gray-500"
-                >
-                  <option value="IN">IN</option>
-                  <option value="OUT">OUT</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 mb-1 block">Note</span>
-                <Input
-                  type="text"
-                  value={entryData.note || ""}
-                  onChange={(e) => setEntryData({ ...entryData, note: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-                  placeholder="Optional"
-                />
-              </label>
-              <Button onClick={handleAddEntry} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 font-semibold">
-                Save entry
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Status</span>
+                  <select
+                    value={entryData.status}
+                    onChange={(e) => setEntryData({ ...entryData, status: e.target.value })}
+                    disabled={entryData.tx_type !== 'TRANSFER'}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 bg-white disabled:bg-slate-50 disabled:text-slate-400 transition-all shadow-sm"
+                  >
+                    <option value="IN">Create Income (IN)</option>
+                    <option value="OUT">Create Expense (OUT)</option>
+                    <option value="Interest">Interest Income</option>
+                  </select>
+                </label>
+
+                {entryData.tx_type === 'FX' && (
+                  <>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">THB Amount</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={entryData.thb || ""}
+                        onChange={(e) => setEntryData({ ...entryData, thb: Number.parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all shadow-sm"
+                        placeholder="0.00"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Exchange Rate</span>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        value={entryData.rate || ""}
+                        onChange={(e) => setEntryData({ ...entryData, rate: Number.parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all shadow-sm"
+                        placeholder="0.0000"
+                      />
+                    </label>
+                  </>
+                )}
+
+                <label className="block md:col-span-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Note</span>
+                  <Input
+                    type="text"
+                    value={entryData.note || ""}
+                    onChange={(e) => setEntryData({ ...entryData, note: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all shadow-sm"
+                    placeholder="Optional description..."
+                  />
+                </label>
+              </div>
+
+              <Button onClick={handleAddEntry} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 rounded-xl font-semibold shadow-lg shadow-slate-200 active:scale-[0.98] transition-all">
+                Save Transaction
               </Button>
             </div>
           )}
         </div>
 
         {/* Entries List */}
-        <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">All Entries</h2>
+        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-base font-bold text-slate-900">Recent Transactions</h2>
+            <span className="text-xs font-medium text-slate-400">{entries.length} records</span>
+          </div>
           <div className="space-y-3">
             {[...entries]
               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .map((entry) => (
-                <div key={entry.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-sky-100 text-sky-700">
-                      {entry.status}
-                    </span>
-                    <span className="text-sm text-slate-600">
-                      {/* Backward compatibility: if date has default T00:00:00 or T00:00:00+00 it usually means old date. 
-                          We display full DateTime now. Old dates will show 00:00. */}
-                      {format(parseISO(entry.date), "MMM dd, yyyy HH:mm")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-semibold text-slate-900">{formatCurrency(entry.usd, "USD")}</span>
-                    <span className="text-slate-600">{formatCurrency(entry.thb || 0, "THB")}</span>
-                  </div>
-                  {entry.rate && <div className="text-sm text-slate-600">Rate: {entry.rate.toFixed(4)}</div>}
-                  {entry.note && (
-                    <div className="mt-2 text-xs text-slate-600 bg-white px-2 py-1 rounded border border-gray-200">
-                      {entry.note}
+              .map((entry) => {
+                let icon;
+                let txLabel = entry.tx_type as string;
+                let amountColor = 'text-slate-900';
+
+                // Determine Icon and Label style
+                if (entry.tx_type === 'FX') {
+                  icon = <span className="text-lg">💱</span>;
+                  txLabel = 'FX Exchange';
+                } else if (entry.tx_type === 'GOLD_BUY') {
+                  icon = <span className="text-lg">🟡</span>;
+                  txLabel = 'Gold Buy';
+                  amountColor = 'text-slate-900';
+                } else if (entry.tx_type === 'GOLD_SELL') {
+                  icon = <span className="text-lg">💰</span>;
+                  txLabel = 'Gold Sell';
+                  amountColor = 'text-emerald-600';
+                } else if (entry.tx_type === 'INTEREST' || entry.status === 'Interest') {
+                  icon = <span className="text-lg">📈</span>;
+                  txLabel = 'Interest';
+                  amountColor = 'text-sky-600';
+                } else {
+                  icon = <span className="text-lg">↔️</span>;
+                  txLabel = 'Transfer';
+                }
+
+                // Override color based on status if needed
+                if (entry.status === 'OUT' && amountColor === 'text-slate-900') amountColor = 'text-slate-900';
+                // We keep it neutral for OUT, or red if preferred. The prompt didn't specify, but neutral/dark is clean.
+                // Let's make OUT amounts slightly visually distinct? 
+                // Actually sticking to "Performance" colors (profit=green) is better.
+
+                return (
+                  <div key={entry.id} className="group p-4 bg-white rounded-xl border border-slate-100 hover:border-sky-100 hover:shadow-md transition-all duration-200">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-white group-hover:scale-110 transition-all">
+                          {icon}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-900 text-sm">{txLabel}</span>
+                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full ${entry.status === 'IN' || entry.status === 'Interest'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-rose-50 text-rose-600'
+                              }`}>
+                              {entry.status}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                            <span>{format(parseISO(entry.date), "dd MMM yyyy, HH:mm")}</span>
+                            {entry.rate && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                                <span className="font-medium text-slate-600">@{Number(entry.rate).toFixed(4)}</span>
+                              </>
+                            )}
+                          </div>
+                          {entry.note && (
+                            <div className="mt-2 text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg inline-block border border-slate-100 italic">
+                              {entry.note}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className={`text-base font-bold ${amountColor}`}>
+                          {entry.status === 'OUT' ? '-' : '+'}{formatCurrency(entry.usd, "USD")}
+                        </div>
+                        {entry.thb && (
+                          <div className="text-xs text-slate-400 mt-0.5 font-medium">
+                            {formatCurrency(entry.thb, "THB")}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
 
             {entries.length === 0 && (
-              <div className="text-center py-8 text-slate-600">No entries yet. Add your first FCD entry.</div>
+              <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <div className="text-4xl mb-3">📝</div>
+                <p>No transactions yet.</p>
+                <button onClick={() => setShowAddEntry(true)} className="text-sky-600 font-medium text-sm mt-2 hover:underline">
+                  Add your first entry
+                </button>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Upload Modal */}
+      {/* Upload Modal (kept essentially same but cleaned up if needed, skipping for now as not requested) */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-end sm:items-center sm:justify-center z-50">
-          <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center sm:justify-center z-50">
+          {/* ... modal content ... reusing existing logic but container style updated above */}
+          <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-6 max-h-[90vh] overflow-y-auto animate-slide-up shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Upload Slip</h3>
               <button
